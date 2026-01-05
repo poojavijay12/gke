@@ -25,7 +25,7 @@ data "google_client_config" "default" {}
 ############################################
 resource "google_container_cluster" "gke" {
   name     = "secure-gke"
-  location = "asia-south1"
+  location = "asia-south1-a"
 
   remove_default_node_pool = true
   initial_node_count       = 1
