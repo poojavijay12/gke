@@ -1,6 +1,3 @@
-############################################
-# TERRAFORM & PROVIDERS
-############################################
 terraform {
   required_version = ">= 1.5.0"
 
@@ -21,91 +18,7 @@ provider "google" {
   region  = "asia-south1"
 }
 
-############################################
-# PROJECT DATA (PROJECT NUMBER IS CRITICAL)
-############################################
-data "google_project" "current" {
-  project_id = "pooja31"
-}
-
 data "google_client_config" "default" {}
-
-############################################
-# STEP 1: ENABLE REQUIRED APIS
-############################################
-resource "google_project_service" "services" {
-  for_each = toset([
-    "container.googleapis.com",
-    "iam.googleapis.com",
-    "cloudresourcemanager.googleapis.com",
-    "sts.googleapis.com",
-    "artifactregistry.googleapis.com"
-  ])
-
-  service = each.value
-}
-
-############################################
-# STEP 2: CI/CD SERVICE ACCOUNT
-############################################
-resource "google_service_account" "terraform_cicd" {
-  account_id   = "terraform-cicd"
-  display_name = "Terraform CI/CD Service Account"
-}
-
-############################################
-# STEP 3: IAM ROLES (MINIMUM REQUIRED)
-############################################
-resource "google_project_iam_member" "cicd_roles" {
-  for_each = toset([
-    "roles/container.admin",
-    "roles/iam.serviceAccountUser",
-    "roles/storage.admin"
-  ])
-
-  role   = each.value
-  member = "serviceAccount:${google_service_account.terraform_cicd.email}"
-}
-
-############################################
-# STEP 4: WORKLOAD IDENTITY POOL
-############################################
-resource "google_iam_workload_identity_pool" "github_pool" {
-  workload_identity_pool_id = "github-pool"
-  display_name              = "GitHub Actions Pool"
-  location                  = "global"
-
-  depends_on = [google_project_service.services]
-}
-
-############################################
-# STEP 5: OIDC PROVIDER (GITHUB)
-############################################
-resource "google_iam_workload_identity_pool_provider" "github_provider" {
-  workload_identity_pool_id          = google_iam_workload_identity_pool.github_pool.workload_identity_pool_id
-  workload_identity_pool_provider_id = "github"
-  location                           = "global"
-  display_name                       = "GitHub OIDC Provider"
-
-  oidc {
-    issuer_uri = "https://token.actions.githubusercontent.com"
-  }
-
-  attribute_mapping = {
-    "google.subject"       = "assertion.sub"
-    "attribute.repository" = "assertion.repository"
-  }
-}
-
-############################################
-# STEP 6: BIND GITHUB REPO → SERVICE ACCOUNT
-############################################
-resource "google_service_account_iam_member" "github_binding" {
-  service_account_id = google_service_account.terraform_cicd.name
-  role               = "roles/iam.workloadIdentityUser"
-
-  member = "principalSet://iam.googleapis.com/projects/${data.google_project.current.number}/locations/global/workloadIdentityPools/${google_iam_workload_identity_pool.github_pool.workload_identity_pool_id}/attribute.repository/poojavijay12/gke"
-}
 
 ############################################
 # GKE CLUSTER (SECURITY FIRST)
@@ -134,17 +47,16 @@ resource "google_container_cluster" "gke" {
   release_channel {
     channel = "REGULAR"
   }
-
-  depends_on = [google_project_service.services]
 }
 
 ############################################
 # NODE POOL
 ############################################
 resource "google_container_node_pool" "nodes" {
-  name      = "primary"
-  cluster   = google_container_cluster.gke.name
-  location  = "asia-south1"
+  name     = "primary"
+  cluster = google_container_cluster.gke.name
+  location = "asia-south1"
+
   node_count = 2
 
   node_config {
@@ -176,7 +88,7 @@ provider "kubernetes" {
 ############################################
 resource "kubernetes_deployment" "app" {
   metadata {
-    name   = "fastapi-app"
+    name = "fastapi-app"
     labels = { app = "fastapi" }
   }
 
@@ -212,7 +124,7 @@ resource "kubernetes_deployment" "app" {
 }
 
 ############################################
-# SERVICE (LOAD BALANCER)
+# SERVICE (LB)
 ############################################
 resource "kubernetes_service" "svc" {
   metadata {
@@ -232,22 +144,10 @@ resource "kubernetes_service" "svc" {
 }
 
 ############################################
-# OUTPUTS (TERRAFORMIC)
+# OUTPUTS (Terraformic Way)
 ############################################
-output "project_number" {
-  value = data.google_project.current.number
-}
-
 output "gke_cluster_name" {
   value = google_container_cluster.gke.name
-}
-
-output "ci_cd_service_account" {
-  value = google_service_account.terraform_cicd.email
-}
-
-output "workload_identity_pool" {
-  value = google_iam_workload_identity_pool.github_pool.workload_identity_pool_id
 }
 
 output "service_ip" {
