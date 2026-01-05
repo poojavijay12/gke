@@ -21,7 +21,7 @@ provider "google" {
 data "google_client_config" "default" {}
 
 ############################################
-# GKE CLUSTER (SECURITY FIRST)
+# GKE CLUSTER (SECURITY FIRST - ZONAL)
 ############################################
 resource "google_container_cluster" "gke" {
   name     = "secure-gke"
@@ -50,20 +50,20 @@ resource "google_container_cluster" "gke" {
 }
 
 ############################################
-# NODE POOL
+# NODE POOL (ZONAL + LOW DISK)
 ############################################
 resource "google_container_node_pool" "nodes" {
   name     = "primary"
-  cluster = google_container_cluster.gke.name
-  location = "asia-south1"
+  cluster  = google_container_cluster.gke.name
+  location = "asia-south1-a"
 
   node_count = 2
 
   node_config {
     machine_type = "e2-medium"
 
-    disk_type = "pd-balanced"
-    disk_size_gb = 50   # 👈 REDUCED FROM DEFAULT 100
+    disk_type    = "pd-balanced"
+    disk_size_gb = 50
 
     shielded_instance_config {
       enable_secure_boot = true
@@ -75,12 +75,11 @@ resource "google_container_node_pool" "nodes" {
   }
 }
 
-
 ############################################
-# KUBERNETES PROVIDER
+# KUBERNETES PROVIDER (FIXED)
 ############################################
 provider "kubernetes" {
-  host                   = google_container_cluster.gke.endpoint
+  host                   = "https://${google_container_cluster.gke.endpoint}"
   token                  = data.google_client_config.default.access_token
   cluster_ca_certificate = base64decode(
     google_container_cluster.gke.master_auth[0].cluster_ca_certificate
@@ -91,6 +90,10 @@ provider "kubernetes" {
 # APPLICATION DEPLOYMENT
 ############################################
 resource "kubernetes_deployment" "app" {
+  depends_on = [
+    google_container_node_pool.nodes
+  ]
+
   metadata {
     name = "fastapi-app"
     labels = { app = "fastapi" }
@@ -128,9 +131,13 @@ resource "kubernetes_deployment" "app" {
 }
 
 ############################################
-# SERVICE (LB)
+# SERVICE (LOAD BALANCER)
 ############################################
 resource "kubernetes_service" "svc" {
+  depends_on = [
+    kubernetes_deployment.app
+  ]
+
   metadata {
     name = "fastapi-service"
   }
@@ -148,7 +155,7 @@ resource "kubernetes_service" "svc" {
 }
 
 ############################################
-# OUTPUTS (Terraformic Way)
+# OUTPUTS
 ############################################
 output "gke_cluster_name" {
   value = google_container_cluster.gke.name
