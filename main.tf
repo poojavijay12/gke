@@ -62,6 +62,9 @@ resource "google_container_node_pool" "nodes" {
   node_config {
     machine_type = "e2-medium"
 
+    disk_type = "pd-balanced"
+    disk_size_gb = 50   # 👈 REDUCED FROM DEFAULT 100
+
     shielded_instance_config {
       enable_secure_boot = true
     }
@@ -71,6 +74,7 @@ resource "google_container_node_pool" "nodes" {
     ]
   }
 }
+
 
 ############################################
 # KUBERNETES PROVIDER
