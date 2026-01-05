@@ -16,23 +16,33 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
+    # 🔐 OIDC AUTH
     - name: Authenticate to GCP (OIDC)
       uses: google-github-actions/auth@v2
       with:
-        workload_identity_provider: "projects/881925804294/locations/global/workloadIdentityPools/github-pool/providers/github"
+        workload_identity_provider: "projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/github-pool/providers/github"
         service_account: "terraform-cicd@pooja31.iam.gserviceaccount.com"
 
     - name: Setup gcloud
       uses: google-github-actions/setup-gcloud@v2
 
+    # 🐳 Docker Auth
     - name: Configure Docker
       run: gcloud auth configure-docker --quiet
 
+    # 🐳 Build & Push Image
     - name: Build & Push Image
       run: |
         docker build -t gcr.io/pooja31/fastapi-gke:latest .
         docker push gcr.io/pooja31/fastapi-gke:latest
 
+    # ✅ INSTALL TERRAFORM (THIS WAS MISSING)
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.6.6
+
+    # 🌍 TERRAFORM
     - name: Terraform Init
       run: terraform init
 
