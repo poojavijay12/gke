@@ -21,6 +21,13 @@ provider "google" {
   region  = "asia-south1"
 }
 
+############################################
+# PROJECT DATA (PROJECT NUMBER IS CRITICAL)
+############################################
+data "google_project" "current" {
+  project_id = "pooja31"
+}
+
 data "google_client_config" "default" {}
 
 ############################################
@@ -67,6 +74,8 @@ resource "google_iam_workload_identity_pool" "github_pool" {
   workload_identity_pool_id = "github-pool"
   display_name              = "GitHub Actions Pool"
   location                  = "global"
+
+  depends_on = [google_project_service.services]
 }
 
 ############################################
@@ -89,13 +98,13 @@ resource "google_iam_workload_identity_pool_provider" "github_provider" {
 }
 
 ############################################
-# STEP 6: BIND GITHUB REPO TO SERVICE ACCOUNT
+# STEP 6: BIND GITHUB REPO → SERVICE ACCOUNT
 ############################################
 resource "google_service_account_iam_member" "github_binding" {
   service_account_id = google_service_account.terraform_cicd.name
   role               = "roles/iam.workloadIdentityUser"
 
-  member = "principalSet://iam.googleapis.com/projects/${data.google_client_config.default.project}/locations/global/workloadIdentityPools/${google_iam_workload_identity_pool.github_pool.workload_identity_pool_id}/attribute.repository/poojavijay12/gke"
+  member = "principalSet://iam.googleapis.com/projects/${data.google_project.current.number}/locations/global/workloadIdentityPools/${google_iam_workload_identity_pool.github_pool.workload_identity_pool_id}/attribute.repository/poojavijay12/gke"
 }
 
 ############################################
@@ -133,10 +142,9 @@ resource "google_container_cluster" "gke" {
 # NODE POOL
 ############################################
 resource "google_container_node_pool" "nodes" {
-  name     = "primary"
-  cluster = google_container_cluster.gke.name
-  location = "asia-south1"
-
+  name      = "primary"
+  cluster   = google_container_cluster.gke.name
+  location  = "asia-south1"
   node_count = 2
 
   node_config {
@@ -168,7 +176,7 @@ provider "kubernetes" {
 ############################################
 resource "kubernetes_deployment" "app" {
   metadata {
-    name = "fastapi-app"
+    name   = "fastapi-app"
     labels = { app = "fastapi" }
   }
 
@@ -226,6 +234,10 @@ resource "kubernetes_service" "svc" {
 ############################################
 # OUTPUTS (TERRAFORMIC)
 ############################################
+output "project_number" {
+  value = data.google_project.current.number
+}
+
 output "gke_cluster_name" {
   value = google_container_cluster.gke.name
 }
