@@ -1,5 +1,6 @@
 terraform {
   required_version = ">= 1.5.0"
+
   backend "gcs" {
     bucket  = "pooja31-terraform-state"
     prefix  = "gke"
@@ -17,6 +18,9 @@ terraform {
   }
 }
 
+############################################
+# GOOGLE PROVIDER
+############################################
 provider "google" {
   project = "pooja31"
   region  = "asia-south1"
@@ -25,7 +29,31 @@ provider "google" {
 data "google_client_config" "default" {}
 
 ############################################
-# GKE CLUSTER (SECURITY FIRST - ZONAL)
+# NETWORK (DEFAULT VPC)
+############################################
+data "google_compute_network" "default" {
+  name = "default"
+}
+
+############################################
+# CLOUD NAT (REQUIRED FOR PRIVATE GKE)
+############################################
+resource "google_compute_router" "nat_router" {
+  name    = "gke-nat-router"
+  region  = "asia-south1"
+  network = data.google_compute_network.default.self_link
+}
+
+resource "google_compute_router_nat" "gke_nat" {
+  name                               = "gke-cloud-nat"
+  router                            = google_compute_router.nat_router.name
+  region                            = "asia-south1"
+  nat_ip_allocate_option            = "AUTO_ONLY"
+  source_subnetwork_ip_ranges_to_nat = "ALL_SUBNETWORKS_ALL_IP_RANGES"
+}
+
+############################################
+# GKE CLUSTER (PRIVATE, ZONAL)
 ############################################
 resource "google_container_cluster" "gke" {
   name     = "secure-gke"
@@ -51,6 +79,10 @@ resource "google_container_cluster" "gke" {
   release_channel {
     channel = "REGULAR"
   }
+
+  depends_on = [
+    google_compute_router_nat.gke_nat
+  ]
 }
 
 ############################################
@@ -80,7 +112,7 @@ resource "google_container_node_pool" "nodes" {
 }
 
 ############################################
-# KUBERNETES PROVIDER (FIXED)
+# KUBERNETES PROVIDER
 ############################################
 provider "kubernetes" {
   host                   = "https://${google_container_cluster.gke.endpoint}"
@@ -100,19 +132,25 @@ resource "kubernetes_deployment" "app" {
 
   metadata {
     name = "fastapi-app"
-    labels = { app = "fastapi" }
+    labels = {
+      app = "fastapi"
+    }
   }
 
   spec {
     replicas = 2
 
     selector {
-      match_labels = { app = "fastapi" }
+      match_labels = {
+        app = "fastapi"
+      }
     }
 
     template {
       metadata {
-        labels = { app = "fastapi" }
+        labels = {
+          app = "fastapi"
+        }
       }
 
       spec {
@@ -147,7 +185,9 @@ resource "kubernetes_service" "svc" {
   }
 
   spec {
-    selector = { app = "fastapi" }
+    selector = {
+      app = "fastapi"
+    }
 
     port {
       port        = 80
