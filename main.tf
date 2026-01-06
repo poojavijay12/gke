@@ -38,13 +38,20 @@ data "google_compute_network" "default" {
 ############################################
 # DEFAULT SUBNET (ENABLE PRIVATE GOOGLE ACCESS)
 ############################################
+data "google_compute_subnetwork" "existing_default" {
+  name   = "default"
+  region = "asia-south1"
+}
+
 resource "google_compute_subnetwork" "default_subnet" {
-  name    = "default"
+  name    = data.google_compute_subnetwork.existing_default.name
   region  = "asia-south1"
   network = data.google_compute_network.default.self_link
 
+  ip_cidr_range            = data.google_compute_subnetwork.existing_default.ip_cidr_range
   private_ip_google_access = true
 }
+
 
 
 ############################################
@@ -92,7 +99,7 @@ resource "google_container_cluster" "gke" {
     channel = "REGULAR"
   }
 
-  depends_on = [
+ depends_on = [
   google_compute_router_nat.gke_nat,
   google_compute_subnetwork.default_subnet
 ]
